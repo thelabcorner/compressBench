@@ -1,4 +1,4 @@
-# CompressBench
+# [CompressBench](https://compressbench.thedabcorner.site)
 
 A comprehensive client-side compression and decompression benchmarking tool that runs entirely in your browser. Compare the performance of various compression algorithms including GZIP, Brotli, Zstandard, and more.
 
