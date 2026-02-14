@@ -2,7 +2,7 @@
 
 A comprehensive client-side compression and decompression benchmarking tool that runs entirely in your browser. Compare the performance of various compression algorithms including GZIP, Brotli, Zstandard, and more.
 
-![CompressBench Screenshot](https://via.placeholder.com/800x400/1f2937/ffffff?text=CompressBench+Screenshot)
+<img src="https://i.ibb.co/fdG0dLVy/compressbench-thedabcorner-site-1.png">
 
 ## Features
 
