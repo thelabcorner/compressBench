@@ -5,6 +5,7 @@ export function Footer() {
         <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-zinc-400 dark:text-zinc-500">
           <p>CompressBench — Client-side compression benchmarking tool</p>
           <p>No data leaves your browser · Native APIs + fflate + brotli-wasm + zstd-codec</p>
+          <p>© 2026 Jackson Cummings · <a href="https://thedabcorner.site" className="hover:text-zinc-300 dark:hover:text-zinc-400">thedabcorner.site</a></p>
         </div>
       </div>
     </footer>
