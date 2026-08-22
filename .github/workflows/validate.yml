@@ -1,7 +1,6 @@
 name: Validate
 
 on:
-  pull_request:
   push:
     branches:
       - master
@@ -31,3 +30,6 @@ jobs:
 
       - name: Build
         run: npm run build
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
