@@ -36,7 +36,7 @@ export function UploadZone({ isDragging, fileInputRef, onDrop, onDragOver, onDra
           <p className="text-base font-medium text-zinc-700 dark:text-zinc-300">
             {isDragging ? 'Drop your file here' : 'Drop a file here or click to browse'}
           </p>
-          <p className="mt-1 text-sm text-zinc-400 dark:text-zinc-500">Any file type · No size limit · 100% local processing</p>
+          <p className="mt-1 text-sm text-zinc-400 dark:text-zinc-500">Any file type · 100% local processing · Large files can use substantial memory</p>
         </div>
       </div>
     </div>

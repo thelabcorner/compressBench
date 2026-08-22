@@ -1,23 +1,26 @@
+import { getBenchmarkOutput } from '@/lib/outputStore';
 import type { BenchmarkResult } from '@/types';
 
-export function downloadBlob(data: Uint8Array, filename: string) {
-  // Create a proper copy of the data to ensure it's a standard Uint8Array
-  const copy = new Uint8Array(data.length);
-  copy.set(data);
-  const blob = new Blob([copy], { type: 'application/octet-stream' });
+function triggerBlobDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
-  // Append to DOM — required by some browsers/sandboxed environments
   a.style.display = 'none';
   document.body.appendChild(a);
   a.click();
-  // Delay revocation to ensure browser has time to initiate the download
   setTimeout(() => {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }, 150);
+}
+
+export async function downloadStoredOutput(outputKey: string | null, filename: string): Promise<boolean> {
+  if (!outputKey) return false;
+  const blob = await getBenchmarkOutput(outputKey);
+  if (!blob) return false;
+  triggerBlobDownload(blob, filename);
+  return true;
 }
 
 export function getBestPerFamily(results: BenchmarkResult[]): BenchmarkResult[] {

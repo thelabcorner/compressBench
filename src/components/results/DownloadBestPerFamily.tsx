@@ -2,7 +2,7 @@ import { PackageOpen, Download } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { formatBytes, formatRatio } from '@/lib/format';
 import { getFamilyColor } from '@/constants';
-import { downloadBlob } from '@/lib/download';
+import { downloadStoredOutput } from '@/lib/download';
 import type { BenchmarkResult } from '@/types';
 
 interface DownloadBestPerFamilyProps {
@@ -17,11 +17,12 @@ export function DownloadBestPerFamily({ bestPerFamily, fileName }: DownloadBestP
         <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
           <PackageOpen className="w-4 h-4 text-zinc-500 dark:text-zinc-400" /> Download Best Per Algorithm
         </h3>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Best compression ratio for each algorithm family</p>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Best compression ratio for each algorithm family · outputs are cached off-heap in IndexedDB</p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {bestPerFamily.map((r, i) => {
           const color = getFamilyColor(r.algorithmFamily);
+          const canDownload = r.outputKey !== null;
           return (
             <div key={i} className="flex items-center justify-between gap-3 p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700">
               <div className="flex items-center gap-2.5 min-w-0">
@@ -32,8 +33,10 @@ export function DownloadBestPerFamily({ bestPerFamily, fileName }: DownloadBestP
                 </div>
               </div>
               <button
-                onClick={() => downloadBlob(r.compressedData, `${fileName}${r.extension}`)}
-                className="shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300 bg-white dark:bg-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-600 border border-zinc-200 dark:border-zinc-600 rounded-lg transition-colors"
+                disabled={!canDownload}
+                title={canDownload ? `Download ${r.extension}` : 'Output was not cached (browser storage quota may be exhausted)'}
+                onClick={() => { void downloadStoredOutput(r.outputKey, `${fileName}${r.extension}`); }}
+                className="shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300 bg-white dark:bg-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-600 border border-zinc-200 dark:border-zinc-600 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Download className="w-3 h-3" /> {r.extension}
               </button>

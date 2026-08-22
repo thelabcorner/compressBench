@@ -3,10 +3,20 @@ import { runBenchmarks, getDefaultAlgorithms } from '@/lib/compression';
 import { computeSHA256 } from '@/lib/hash';
 import { saveBenchmarkHistory } from '@/lib/history';
 import { getBestPerFamily } from '@/lib/download';
+import { deleteBenchmarkOutputs } from '@/lib/outputStore';
 import type {
   FileInfo, BenchmarkResult, BenchmarkStatus, ChartMetric, ChartSort,
   BenchmarkConfig, BenchmarkHistoryEntry,
 } from '@/types';
+
+const EMPTY_BEST_VALUES = {
+  bestRatio: 0,
+  bestSpeed: 0,
+  bestThroughput: 0,
+  smallestSize: 0,
+  bestDecompSpeed: 0,
+  bestDecompThroughput: 0,
+};
 
 export function useBenchmark() {
   const [file, setFile] = useState<FileInfo | null>(null);
@@ -27,18 +37,29 @@ export function useBenchmark() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Initialize algorithm config
   useEffect(() => {
     getDefaultAlgorithms().then(algos => {
       setConfig({ iterations: 3, algorithms: algos });
     });
   }, []);
 
+  const releaseOutputs = useCallback((items: readonly BenchmarkResult[]) => {
+    const keys = items.map(result => result.outputKey);
+    if (keys.some(Boolean)) void deleteBenchmarkOutputs(keys);
+  }, []);
+
   // ─── Chart sorting ───
 
   const chartSortedResults = useMemo(() => {
     const arr = [...results];
-    const familyOrder = ['gzip', 'deflate', 'deflate-raw', 'zlib', 'brotli', 'zstd'];
+    const familyOrder: Record<string, number> = {
+      gzip: 0,
+      deflate: 1,
+      'deflate-raw': 2,
+      zlib: 3,
+      brotli: 4,
+      zstd: 5,
+    };
 
     const getVal = (r: BenchmarkResult): number => {
       switch (chartMetric) {
@@ -56,7 +77,7 @@ export function useBenchmark() {
         return arr.sort((a, b) => a.algorithm.localeCompare(b.algorithm));
       case 'family':
         return arr.sort((a, b) => {
-          const fi = familyOrder.indexOf(a.algorithmFamily) - familyOrder.indexOf(b.algorithmFamily);
+          const fi = (familyOrder[a.algorithmFamily] ?? 999) - (familyOrder[b.algorithmFamily] ?? 999);
           if (fi !== 0) return fi;
           if (a.provider !== b.provider) {
             if (a.provider === 'native') return -1;
@@ -94,14 +115,34 @@ export function useBenchmark() {
 
   // ─── Best values ───
 
-  const bestValues = useMemo(() => ({
-    bestRatio: results.length > 0 ? Math.max(...results.map(r => r.compressionRatio)) : 0,
-    bestSpeed: results.length > 0 ? Math.min(...results.map(r => r.compressTime)) : 0,
-    bestThroughput: results.length > 0 ? Math.max(...results.map(r => r.throughputCompress)) : 0,
-    smallestSize: results.length > 0 ? Math.min(...results.map(r => r.compressedSize)) : 0,
-    bestDecompSpeed: results.length > 0 ? Math.min(...results.map(r => r.decompressTime)) : 0,
-    bestDecompThroughput: results.length > 0 ? Math.max(...results.map(r => r.throughputDecompress)) : 0,
-  }), [results]);
+  const bestValues = useMemo(() => {
+    if (results.length === 0) return EMPTY_BEST_VALUES;
+
+    let bestRatio = Number.NEGATIVE_INFINITY;
+    let bestSpeed = Number.POSITIVE_INFINITY;
+    let bestThroughput = Number.NEGATIVE_INFINITY;
+    let smallestSize = Number.POSITIVE_INFINITY;
+    let bestDecompSpeed = Number.POSITIVE_INFINITY;
+    let bestDecompThroughput = Number.NEGATIVE_INFINITY;
+
+    for (const r of results) {
+      if (r.compressionRatio > bestRatio) bestRatio = r.compressionRatio;
+      if (r.compressTime < bestSpeed) bestSpeed = r.compressTime;
+      if (r.throughputCompress > bestThroughput) bestThroughput = r.throughputCompress;
+      if (r.compressedSize < smallestSize) smallestSize = r.compressedSize;
+      if (r.decompressTime < bestDecompSpeed) bestDecompSpeed = r.decompressTime;
+      if (r.throughputDecompress > bestDecompThroughput) bestDecompThroughput = r.throughputDecompress;
+    }
+
+    return {
+      bestRatio,
+      bestSpeed,
+      bestThroughput,
+      smallestSize,
+      bestDecompSpeed,
+      bestDecompThroughput,
+    };
+  }, [results]);
 
   const bestPerFamily = useMemo(() => getBestPerFamily(results), [results]);
 
@@ -109,6 +150,7 @@ export function useBenchmark() {
 
   const handleFile = useCallback(async (f: File) => {
     if (!config) return;
+    releaseOutputs(results);
     setError(null);
     setResults([]);
     setExpandedRow(null);
@@ -125,10 +167,12 @@ export function useBenchmark() {
         name: f.name,
         size: f.size,
         type: f.type || 'application/octet-stream',
-        data,
+        source: f,
         hash,
       };
 
+      // Store only the File handle/metadata in React state. The large Uint8Array
+      // remains local to this run and becomes collectible once benchmarking ends.
       setFile(fileInfo);
       setStatus('running');
 
@@ -147,15 +191,21 @@ export function useBenchmark() {
       setError(err instanceof Error ? err.message : 'An error occurred');
       setStatus('error');
     }
-  }, [config]);
+  }, [config, releaseOutputs, results]);
 
   const handleRerun = useCallback(async () => {
     if (!file || !config) return;
+    releaseOutputs(results);
     setResults([]);
     setExpandedRow(null);
+    setError(null);
     setStatus('running');
+
     try {
-      const benchResults = await runBenchmarks(file.data, config, (current, total, name) => {
+      // Re-read the source only for the duration of the rerun instead of pinning
+      // the entire input buffer in React state between runs.
+      const data = new Uint8Array(await file.source.arrayBuffer());
+      const benchResults = await runBenchmarks(data, config, (current, total, name) => {
         setProgress({ current, total, name });
       });
       setResults(benchResults);
@@ -169,19 +219,20 @@ export function useBenchmark() {
       setError(err instanceof Error ? err.message : 'An error occurred');
       setStatus('error');
     }
-  }, [file, config]);
+  }, [file, config, releaseOutputs, results]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
     const f = e.dataTransfer.files[0];
-    if (f) handleFile(f);
+    if (f) void handleFile(f);
   }, [handleFile]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); }, []);
   const handleDragLeave = useCallback((e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); }, []);
 
   const handleReset = useCallback(() => {
+    releaseOutputs(results);
     setFile(null);
     setResults([]);
     setStatus('idle');
@@ -190,15 +241,25 @@ export function useBenchmark() {
     setViewingHistory(null);
     setProgress({ current: 0, total: 0, name: '' });
     if (fileInputRef.current) fileInputRef.current.value = '';
-  }, []);
+  }, [releaseOutputs, results]);
 
   const handleSort = useCallback((col: typeof sortBy) => {
     if (sortBy === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortBy(col); setSortDir(col === 'speed' || col === 'size' || col === 'decompSpeed' ? 'asc' : 'desc'); }
   }, [sortBy]);
 
-  const enabledCount = config?.algorithms.filter(a => a.enabled).length ?? 0;
-  const totalTasks = config?.algorithms.filter(a => a.enabled).reduce((sum, a) => sum + (a.supportsLevels ? a.levels.length : 1), 0) ?? 0;
+  const { enabledCount, totalTasks } = useMemo(() => {
+    let enabled = 0;
+    let tasks = 0;
+    if (!config) return { enabledCount: 0, totalTasks: 0 };
+
+    for (const algo of config.algorithms) {
+      if (!algo.enabled) continue;
+      enabled++;
+      tasks += algo.supportsLevels ? algo.levels.length : 1;
+    }
+    return { enabledCount: enabled, totalTasks: tasks };
+  }, [config]);
 
   return {
     // State

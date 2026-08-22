@@ -2,7 +2,7 @@ export interface FileInfo {
   name: string;
   size: number;
   type: string;
-  data: Uint8Array;
+  source: File;
   hash: string;
 }
 
@@ -39,7 +39,7 @@ export interface BenchmarkResult {
   decompressTimeMax: number;
   throughputCompress: number;
   throughputDecompress: number;
-  compressedData: Uint8Array;
+  outputKey: string | null;
   verified: boolean;
   extension: string;
   level?: number;
@@ -48,7 +48,7 @@ export interface BenchmarkResult {
   providerLabel: string;
 }
 
-// Stored version without binary data
+// Stored history version without transient output references.
 export interface StoredBenchmarkResult {
   algorithm: string;
   algorithmFamily: string;
