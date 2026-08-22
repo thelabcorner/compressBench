@@ -1,4 +1,4 @@
-import { Gauge, XCircle } from 'lucide-react';
+import { Gauge, XCircle, Square } from 'lucide-react';
 import { formatBytes } from '@/lib/format';
 import type { BenchmarkStatus, FileInfo } from '@/types';
 
@@ -9,9 +9,10 @@ interface ProgressProps {
   progress: { current: number; total: number; name: string };
   error: string | null;
   onReset: () => void;
+  onCancel: () => void;
 }
 
-export function BenchmarkProgress({ status, file, iterations, progress, error, onReset }: ProgressProps) {
+export function BenchmarkProgress({ status, file, iterations, progress, error, onReset, onCancel }: ProgressProps) {
   if (status === 'error') {
     return (
       <div className="animate-fade-in">
@@ -55,6 +56,14 @@ export function BenchmarkProgress({ status, file, iterations, progress, error, o
                   style={{ width: `${progress.total > 0 ? (progress.current / progress.total) * 100 : 0}%` }} />
               </div>
             </div>
+          )}
+          {(status === 'loading' || status === 'running') && (
+            <button
+              onClick={onCancel}
+              className="inline-flex items-center gap-2 px-3 py-2 text-xs font-medium text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg transition-colors"
+            >
+              <Square className="w-3 h-3 fill-current" /> Cancel
+            </button>
           )}
         </div>
       </div>

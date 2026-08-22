@@ -23,6 +23,9 @@ export function DownloadBestPerFamily({ bestPerFamily, fileName }: DownloadBestP
         {bestPerFamily.map((r, i) => {
           const color = getFamilyColor(r.algorithmFamily);
           const canDownload = r.outputKey !== null;
+          const downloadTitle = canDownload
+            ? `Download ${r.extension}`
+            : (r.outputUnavailableReason ?? 'Output was not cached (browser storage quota may be exhausted)');
           return (
             <div key={i} className="flex items-center justify-between gap-3 p-3 rounded-lg bg-zinc-50 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700">
               <div className="flex items-center gap-2.5 min-w-0">
@@ -34,7 +37,7 @@ export function DownloadBestPerFamily({ bestPerFamily, fileName }: DownloadBestP
               </div>
               <button
                 disabled={!canDownload}
-                title={canDownload ? `Download ${r.extension}` : 'Output was not cached (browser storage quota may be exhausted)'}
+                title={downloadTitle}
                 onClick={() => { void downloadStoredOutput(r.outputKey, `${fileName}${r.extension}`); }}
                 className="shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300 bg-white dark:bg-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-600 border border-zinc-200 dark:border-zinc-600 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >

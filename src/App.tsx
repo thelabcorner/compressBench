@@ -163,6 +163,7 @@ export function App() {
             progress={bench.progress}
             error={bench.error}
             onReset={bench.handleReset}
+            onCancel={bench.handleReset}
           />
         )}
 
@@ -187,6 +188,17 @@ export function App() {
               iterations={bench.config.iterations}
               algorithms={bench.config.algorithms}
             />
+
+            {bench.notices.length > 0 && (
+              <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900">
+                <Info className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
+                <div className="space-y-1">
+                  {bench.notices.map((notice, index) => (
+                    <p key={index} className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">{notice}</p>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <SummaryCards results={bench.results} bestValues={bench.bestValues} />
 
@@ -235,7 +247,7 @@ export function App() {
                 <strong className="text-zinc-600 dark:text-zinc-300">JS/WASM libraries</strong> (fflate, brotli-wasm, zstd-codec).
                 Each benchmark runs {bench.config.iterations}× iterations — results show averages with min/max in detail view.
                 File integrity verified via round-trip decompress. SHA-256 hash computed on upload.
-                Results auto-saved to IndexedDB (compressed, without file data).
+                Large files are slice-streamed with chunked IndexedDB spill when the provider supports bounded-memory streaming.
               </p>
             </div>
           </div>
