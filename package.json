@@ -6,6 +6,7 @@
   "author": "Jackson Cummings (https://thedabcorner.site)",
   "scripts": {
     "dev": "vite",
+    "typecheck": "tsc --noEmit",
     "build": "vite build",
     "preview": "vite preview"
   },
