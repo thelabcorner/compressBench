@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { runBenchmarks, getDefaultAlgorithms } from '@/lib/compression';
-import { computeSHA256 } from '@/lib/hash';
+import { computeFileSHA256 } from '@/lib/hash';
+import { runLargeFileBenchmarks, LARGE_FILE_STREAMING_THRESHOLD } from '@/lib/largeFileBenchmark';
 import { saveBenchmarkHistory } from '@/lib/history';
 import { getBestPerFamily } from '@/lib/download';
 import { deleteBenchmarkOutputs } from '@/lib/outputStore';
@@ -18,12 +19,41 @@ const EMPTY_BEST_VALUES = {
   bestDecompThroughput: 0,
 };
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
+
+function throwIfAborted(signal: AbortSignal): void {
+  if (!signal.aborted) return;
+  if (signal.reason instanceof Error) throw signal.reason;
+  throw new DOMException('Benchmark cancelled', 'AbortError');
+}
+
+async function runFileBenchmark(
+  source: File,
+  sourceHash: string,
+  config: BenchmarkConfig,
+  onProgress: (current: number, total: number, name: string) => void,
+  signal: AbortSignal,
+  onNotice: (message: string) => void,
+): Promise<BenchmarkResult[]> {
+  if (source.size >= LARGE_FILE_STREAMING_THRESHOLD) {
+    return runLargeFileBenchmarks(source, sourceHash, config, onProgress, signal, onNotice);
+  }
+
+  throwIfAborted(signal);
+  const data = new Uint8Array(await source.arrayBuffer());
+  throwIfAborted(signal);
+  return runBenchmarks(data, config, onProgress);
+}
+
 export function useBenchmark() {
   const [file, setFile] = useState<FileInfo | null>(null);
   const [results, setResults] = useState<BenchmarkResult[]>([]);
   const [status, setStatus] = useState<BenchmarkStatus>('idle');
   const [progress, setProgress] = useState({ current: 0, total: 0, name: '' });
   const [error, setError] = useState<string | null>(null);
+  const [notices, setNotices] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<'ratio' | 'speed' | 'throughput' | 'size' | 'decompSpeed' | 'decompThroughput'>('ratio');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
@@ -36,16 +66,29 @@ export function useBenchmark() {
   const [isDragging, setIsDragging] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     getDefaultAlgorithms().then(algos => {
       setConfig({ iterations: 3, algorithms: algos });
     });
+    return () => { abortRef.current?.abort(); };
+  }, []);
+
+  const addNotice = useCallback((message: string) => {
+    setNotices(current => current.includes(message) ? current : [...current, message]);
   }, []);
 
   const releaseOutputs = useCallback((items: readonly BenchmarkResult[]) => {
     const keys = items.map(result => result.outputKey);
     if (keys.some(Boolean)) void deleteBenchmarkOutputs(keys);
+  }, []);
+
+  const beginRun = useCallback(() => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    return controller;
   }, []);
 
   // ─── Chart sorting ───
@@ -150,18 +193,20 @@ export function useBenchmark() {
 
   const handleFile = useCallback(async (f: File) => {
     if (!config) return;
+    const controller = beginRun();
     releaseOutputs(results);
     setError(null);
+    setNotices([]);
     setResults([]);
     setExpandedRow(null);
     setShowHistory(false);
     setViewingHistory(null);
     setStatus('loading');
+    setProgress({ current: 0, total: 0, name: 'Computing SHA-256' });
 
     try {
-      const arrayBuffer = await f.arrayBuffer();
-      const data = new Uint8Array(arrayBuffer);
-      const hash = await computeSHA256(data);
+      const hash = await computeFileSHA256(f, controller.signal);
+      throwIfAborted(controller.signal);
 
       const fileInfo: FileInfo = {
         name: f.name,
@@ -171,14 +216,18 @@ export function useBenchmark() {
         hash,
       };
 
-      // Store only the File handle/metadata in React state. The large Uint8Array
-      // remains local to this run and becomes collectible once benchmarking ends.
       setFile(fileInfo);
       setStatus('running');
 
-      const benchResults = await runBenchmarks(data, config, (current, total, name) => {
-        setProgress({ current, total, name });
-      });
+      const benchResults = await runFileBenchmark(
+        f,
+        hash,
+        config,
+        (current, total, name) => setProgress({ current, total, name }),
+        controller.signal,
+        addNotice,
+      );
+      throwIfAborted(controller.signal);
 
       setResults(benchResults);
       setStatus('complete');
@@ -188,26 +237,35 @@ export function useBenchmark() {
         config.iterations, benchResults,
       );
     } catch (err) {
+      if (controller.signal.aborted || isAbortError(err)) return;
       setError(err instanceof Error ? err.message : 'An error occurred');
       setStatus('error');
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null;
     }
-  }, [config, releaseOutputs, results]);
+  }, [addNotice, beginRun, config, releaseOutputs, results]);
 
   const handleRerun = useCallback(async () => {
     if (!file || !config) return;
+    const controller = beginRun();
     releaseOutputs(results);
     setResults([]);
     setExpandedRow(null);
     setError(null);
+    setNotices([]);
     setStatus('running');
 
     try {
-      // Re-read the source only for the duration of the rerun instead of pinning
-      // the entire input buffer in React state between runs.
-      const data = new Uint8Array(await file.source.arrayBuffer());
-      const benchResults = await runBenchmarks(data, config, (current, total, name) => {
-        setProgress({ current, total, name });
-      });
+      const benchResults = await runFileBenchmark(
+        file.source,
+        file.hash,
+        config,
+        (current, total, name) => setProgress({ current, total, name }),
+        controller.signal,
+        addNotice,
+      );
+      throwIfAborted(controller.signal);
+
       setResults(benchResults);
       setStatus('complete');
 
@@ -216,10 +274,13 @@ export function useBenchmark() {
         config.iterations, benchResults,
       );
     } catch (err) {
+      if (controller.signal.aborted || isAbortError(err)) return;
       setError(err instanceof Error ? err.message : 'An error occurred');
       setStatus('error');
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null;
     }
-  }, [file, config, releaseOutputs, results]);
+  }, [addNotice, beginRun, file, config, releaseOutputs, results]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -232,11 +293,14 @@ export function useBenchmark() {
   const handleDragLeave = useCallback((e: React.DragEvent) => { e.preventDefault(); setIsDragging(false); }, []);
 
   const handleReset = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
     releaseOutputs(results);
     setFile(null);
     setResults([]);
     setStatus('idle');
     setError(null);
+    setNotices([]);
     setExpandedRow(null);
     setViewingHistory(null);
     setProgress({ current: 0, total: 0, name: '' });
@@ -263,7 +327,7 @@ export function useBenchmark() {
 
   return {
     // State
-    file, results, status, progress, error, config,
+    file, results, status, progress, error, notices, config,
     sortBy, sortDir, expandedRow, chartMetric, chartSort,
     showSettings, showHistory, viewingHistory, isDragging,
     fileInputRef,

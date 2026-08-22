@@ -72,6 +72,9 @@ export function ResultsTable({
               const isExpanded = expandedRow === i;
               const color = getFamilyColor(r.algorithmFamily);
               const canDownload = r.outputKey !== null;
+              const downloadTitle = canDownload
+                ? `Download ${r.extension}`
+                : (r.outputUnavailableReason ?? 'Output was not cached (browser storage quota may be exhausted)');
 
               return (
                 <tr key={i}
@@ -102,7 +105,7 @@ export function ResultsTable({
                   <td className="text-right px-4 py-3">
                     <button
                       disabled={!canDownload}
-                      title={canDownload ? `Download ${r.extension}` : 'Output was not cached (browser storage quota may be exhausted)'}
+                      title={downloadTitle}
                       onClick={e => { e.stopPropagation(); void downloadStoredOutput(r.outputKey, `${fileName}${r.extension}`); }}
                       className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-zinc-100 dark:disabled:hover:bg-zinc-800"
                     >
@@ -123,6 +126,9 @@ export function ResultsTable({
           const isSmallest = r.compressedSize === smallestSize;
           const color = getFamilyColor(r.algorithmFamily);
           const canDownload = r.outputKey !== null;
+          const downloadTitle = canDownload
+            ? `Download ${r.extension}`
+            : (r.outputUnavailableReason ?? 'Output was not cached (browser storage quota may be exhausted)');
 
           return (
             <div key={i} className="p-4 space-y-3">
@@ -158,7 +164,7 @@ export function ResultsTable({
               </div>
               <button
                 disabled={!canDownload}
-                title={canDownload ? `Download ${r.extension}` : 'Output was not cached (browser storage quota may be exhausted)'}
+                title={downloadTitle}
                 onClick={() => { void downloadStoredOutput(r.outputKey, `${fileName}${r.extension}`); }}
                 className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >

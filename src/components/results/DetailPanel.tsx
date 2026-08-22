@@ -20,6 +20,9 @@ interface DetailPanelProps {
 export function DetailPanel({ result: r, fileName, isDark, onClose }: DetailPanelProps) {
   const color = getFamilyColor(r.algorithmFamily);
   const canDownload = r.outputKey !== null;
+  const downloadTitle = canDownload
+    ? `Download ${r.extension}`
+    : (r.outputUnavailableReason ?? 'Output was not cached (browser storage quota may be exhausted)');
 
   return (
     <div className="animate-slide-up bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 sm:p-6">
@@ -66,7 +69,7 @@ export function DetailPanel({ result: r, fileName, isDark, onClose }: DetailPane
         <span className="text-zinc-300 dark:text-zinc-600">·</span>
         <button
           disabled={!canDownload}
-          title={canDownload ? `Download ${r.extension}` : 'Output was not cached (browser storage quota may be exhausted)'}
+          title={downloadTitle}
           onClick={() => { void downloadStoredOutput(r.outputKey, `${fileName}${r.extension}`); }}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >

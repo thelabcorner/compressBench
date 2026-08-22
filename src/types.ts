@@ -40,6 +40,7 @@ export interface BenchmarkResult {
   throughputCompress: number;
   throughputDecompress: number;
   outputKey: string | null;
+  outputUnavailableReason?: string;
   verified: boolean;
   extension: string;
   level?: number;
