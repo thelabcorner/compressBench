@@ -1,4 +1,4 @@
-import { get, set, keys, del } from 'idb-keyval';
+import { getMany, set, keys, del, delMany } from 'idb-keyval';
 import type { BenchmarkHistoryEntry, BenchmarkResult, StoredBenchmarkResult } from '@/types';
 
 const HISTORY_PREFIX = 'bench_';
@@ -52,7 +52,8 @@ export async function saveBenchmarkHistory(
   const jsonStr = JSON.stringify(entry);
   const encoded = new TextEncoder().encode(jsonStr);
 
-  let stored: Uint8Array;
+  let stored: Uint8Array = encoded;
+  let compressed = false;
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const cs = new CompressionStream('gzip' as any);
@@ -74,19 +75,20 @@ export async function saveBenchmarkHistory(
     stored = new Uint8Array(totalLen);
     let offset = 0;
     for (const chunk of chunks) { stored.set(chunk, offset); offset += chunk.length; }
+    compressed = true;
   } catch {
-    stored = encoded;
+    // Keep the raw UTF-8 payload when CompressionStream is unavailable.
   }
 
-  await set(id, { compressed: true, data: Array.from(stored) });
+  // IndexedDB structured-clones typed arrays directly. Keeping the Uint8Array
+  // avoids expanding every byte into a boxed JS number via Array.from().
+  await set(id, { compressed, data: stored });
 
   const allKeys = (await keys()).filter(k => typeof k === 'string' && (k as string).startsWith(HISTORY_PREFIX));
   if (allKeys.length > MAX_ENTRIES) {
     const sorted = allKeys.sort();
     const toDelete = sorted.slice(0, allKeys.length - MAX_ENTRIES);
-    for (const key of toDelete) {
-      await del(key);
-    }
+    if (toDelete.length > 0) await delMany(toDelete);
   }
 
   return id;
@@ -95,15 +97,16 @@ export async function saveBenchmarkHistory(
 export async function loadBenchmarkHistory(): Promise<BenchmarkHistoryEntry[]> {
   const allKeys = (await keys()).filter(k => typeof k === 'string' && (k as string).startsWith(HISTORY_PREFIX));
   const entries: BenchmarkHistoryEntry[] = [];
+  const rawEntries = await getMany(allKeys);
 
-  for (const key of allKeys) {
+  for (const raw of rawEntries) {
     try {
-      const raw = await get(key);
       if (!raw) continue;
 
       let jsonStr: string;
       if (raw.compressed && raw.data) {
-        const data = new Uint8Array(raw.data);
+        // Backwards compatible with older history entries that stored number[].
+        const data = raw.data instanceof Uint8Array ? raw.data : new Uint8Array(raw.data);
         try {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const ds = new DecompressionStream('gzip' as any);
@@ -129,6 +132,9 @@ export async function loadBenchmarkHistory(): Promise<BenchmarkHistoryEntry[]> {
         } catch {
           jsonStr = new TextDecoder().decode(data);
         }
+      } else if (raw.data) {
+        const data = raw.data instanceof Uint8Array ? raw.data : new Uint8Array(raw.data);
+        jsonStr = new TextDecoder().decode(data);
       } else if (typeof raw === 'string') {
         jsonStr = raw;
       } else {
@@ -151,7 +157,5 @@ export async function deleteBenchmarkEntry(id: string): Promise<void> {
 
 export async function clearAllHistory(): Promise<void> {
   const allKeys = (await keys()).filter(k => typeof k === 'string' && (k as string).startsWith(HISTORY_PREFIX));
-  for (const key of allKeys) {
-    await del(key);
-  }
+  if (allKeys.length > 0) await delMany(allKeys);
 }
