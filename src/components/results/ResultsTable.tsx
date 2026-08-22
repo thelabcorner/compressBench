@@ -4,7 +4,7 @@ import { formatBytes, formatTime, formatThroughput, formatRatio } from '@/lib/fo
 import { getFamilyColor, getProviderBadgeClass } from '@/constants';
 import { ProviderIcon } from '@/components/ui/ProviderBadge';
 import { SortIcon } from '@/components/ui/SortIcon';
-import { downloadBlob } from '@/lib/download';
+import { downloadStoredOutput } from '@/lib/download';
 import type { BenchmarkResult } from '@/types';
 
 type SortColumn = 'ratio' | 'speed' | 'throughput' | 'size' | 'decompSpeed' | 'decompThroughput';
@@ -43,7 +43,6 @@ export function ResultsTable({
         <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Click row for details · Click headers to sort · Showing avg of {iterations}× iterations</p>
       </div>
 
-      {/* Desktop Table */}
       <div className="hidden lg:block overflow-x-auto">
         <table className="w-full">
           <thead>
@@ -72,6 +71,7 @@ export function ResultsTable({
               const isBestDecompTP = r.throughputDecompress === bestDecompThroughput;
               const isExpanded = expandedRow === i;
               const color = getFamilyColor(r.algorithmFamily);
+              const canDownload = r.outputKey !== null;
 
               return (
                 <tr key={i}
@@ -100,8 +100,12 @@ export function ResultsTable({
                   <td className="text-right px-3 py-3"><span className={cn("text-xs font-mono tabular-nums", isBestDecompTP ? "text-cyan-600 dark:text-cyan-400 font-semibold" : "text-zinc-700 dark:text-zinc-300")}>{formatThroughput(r.throughputDecompress)}</span></td>
                   <td className="text-center px-3 py-3">{r.verified ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mx-auto" /> : <XCircle className="w-3.5 h-3.5 text-red-400 mx-auto" />}</td>
                   <td className="text-right px-4 py-3">
-                    <button onClick={e => { e.stopPropagation(); downloadBlob(r.compressedData, `${fileName}${r.extension}`); }}
-                      className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-md transition-colors">
+                    <button
+                      disabled={!canDownload}
+                      title={canDownload ? `Download ${r.extension}` : 'Output was not cached (browser storage quota may be exhausted)'}
+                      onClick={e => { e.stopPropagation(); void downloadStoredOutput(r.outputKey, `${fileName}${r.extension}`); }}
+                      className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-zinc-600 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-zinc-100 dark:disabled:hover:bg-zinc-800"
+                    >
                       <Download className="w-3 h-3" /> {r.extension}
                     </button>
                   </td>
@@ -112,13 +116,13 @@ export function ResultsTable({
         </table>
       </div>
 
-      {/* Mobile Cards */}
       <div className="lg:hidden divide-y divide-zinc-100 dark:divide-zinc-800">
         {sortedResults.map((r, i) => {
           const isBestRatio = r.compressionRatio === bestRatio;
           const isFastest = r.compressTime === bestSpeed;
           const isSmallest = r.compressedSize === smallestSize;
           const color = getFamilyColor(r.algorithmFamily);
+          const canDownload = r.outputKey !== null;
 
           return (
             <div key={i} className="p-4 space-y-3">
@@ -152,8 +156,12 @@ export function ResultsTable({
                   </div>
                 ))}
               </div>
-              <button onClick={() => downloadBlob(r.compressedData, `${fileName}${r.extension}`)}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg transition-colors">
+              <button
+                disabled={!canDownload}
+                title={canDownload ? `Download ${r.extension}` : 'Output was not cached (browser storage quota may be exhausted)'}
+                onClick={() => { void downloadStoredOutput(r.outputKey, `${fileName}${r.extension}`); }}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
                 <Download className="w-3.5 h-3.5" /> Download {r.extension}
               </button>
             </div>
