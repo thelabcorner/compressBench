@@ -10,7 +10,8 @@ permissions:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, personal-pool, homelab]
+    if: github.repository == 'thelabcorner/compressBench'
     timeout-minutes: 15
     steps:
       - name: Checkout
